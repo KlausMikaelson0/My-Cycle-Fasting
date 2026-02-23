@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { Language } from "../i18n";
+import { getApiErrorMessage } from "../utils/apiError";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -24,8 +25,8 @@ export function RegisterPage() {
     try {
       await register({ email, password, language: selectedLanguage });
       navigate("/", { replace: true });
-    } catch {
-      setError(t("status.error"));
+    } catch (error) {
+      setError(getApiErrorMessage(error, t("status.error")));
     } finally {
       setLoading(false);
     }

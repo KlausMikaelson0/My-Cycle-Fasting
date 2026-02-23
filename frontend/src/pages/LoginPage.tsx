@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
+import { getApiErrorMessage } from "../utils/apiError";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -25,8 +26,8 @@ export function LoginPage() {
     try {
       await login({ email, password });
       navigate(fromPath, { replace: true });
-    } catch {
-      setError(t("status.error"));
+    } catch (error) {
+      setError(getApiErrorMessage(error, t("status.error")));
     } finally {
       setLoading(false);
     }

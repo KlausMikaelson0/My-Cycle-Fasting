@@ -37,6 +37,11 @@ const summarySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2200).optional(),
 });
 
+function periodStartMatchesDate(dayDate: Date, periodStartDateTime?: Date | null): boolean {
+  if (!periodStartDateTime) return true;
+  return normalizeDateOnly(periodStartDateTime).getTime() === normalizeDateOnly(dayDate).getTime();
+}
+
 function requireUserId(req: AuthenticatedRequest, res: Response): string | null {
   if (!req.userId) {
     res.status(401).json({ message: "Unauthorized" });
@@ -140,6 +145,11 @@ router.post("/", async (req: AuthenticatedRequest, res) => {
 
     const input = createOrUpdateSchema.parse(req.body);
     const normalizedDate = normalizeDateOnly(input.date);
+    if (!periodStartMatchesDate(normalizedDate, input.periodStartDateTime)) {
+      res.status(400).json({ message: "periodStartDateTime must be on the same date as date" });
+      return;
+    }
+
     const prayerTimes = await resolvePrayerTimesIfPossible(userId, normalizedDate);
     const updatePayload: Record<string, unknown> = {
       userId: new Types.ObjectId(userId),
@@ -200,6 +210,10 @@ router.put("/:id", async (req: AuthenticatedRequest, res) => {
       if (input.periodStartDateTime === null) {
         fastingDay.set("periodStartDateTime", undefined);
       } else {
+        if (!periodStartMatchesDate(fastingDay.date, input.periodStartDateTime)) {
+          res.status(400).json({ message: "periodStartDateTime must be on the same date as date" });
+          return;
+        }
         fastingDay.periodStartDateTime = input.periodStartDateTime;
       }
     }

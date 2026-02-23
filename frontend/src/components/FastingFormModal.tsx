@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { FastingDayRecord } from "../types/models";
+import { getApiErrorMessage } from "../utils/apiError";
 import { combineDateTimeToIso, formatLocalizedDate, toTimeInputValue } from "../utils/datetime";
 import { useLanguage } from "../context/LanguageContext";
 import { Modal } from "./Modal";
@@ -19,6 +20,12 @@ interface FastingFormModalProps {
   }) => Promise<void>;
 }
 
+function inferRamadanDay(date: string): boolean {
+  // Keep frontend inference aligned with backend stub until Hijri integration is added.
+  const utcMonth = new Date(date).getUTCMonth() + 1;
+  return utcMonth === 3;
+}
+
 export function FastingFormModal({
   open,
   date,
@@ -33,11 +40,13 @@ export function FastingFormModal({
   const [periodStartedToday, setPeriodStartedToday] = useState(false);
   const [periodStartTime, setPeriodStartTime] = useState("12:00");
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setErrorMessage(null);
     setIsFasted(initialRecord?.isFasted ?? false);
-    setIsRamadanDay(initialRecord?.isRamadanDay ?? false);
+    setIsRamadanDay(initialRecord?.isRamadanDay ?? inferRamadanDay(date));
     setIsQada(initialRecord?.isQada ?? false);
     setPeriodStartedToday(Boolean(initialRecord?.periodStartDateTime));
     if (initialRecord?.periodStartDateTime) {
@@ -45,11 +54,12 @@ export function FastingFormModal({
     } else {
       setPeriodStartTime("12:00");
     }
-  }, [initialRecord, open]);
+  }, [date, initialRecord, open]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setSaving(true);
+    setErrorMessage(null);
 
     try {
       await onSave({
@@ -62,6 +72,8 @@ export function FastingFormModal({
           : undefined,
       });
       onClose();
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error, t("status.error")));
     } finally {
       setSaving(false);
     }
@@ -111,6 +123,8 @@ export function FastingFormModal({
             />
           </label>
         ) : null}
+
+        {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
 
         <div className="form-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>

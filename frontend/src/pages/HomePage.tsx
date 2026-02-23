@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   createPeriod,
@@ -14,6 +15,7 @@ import { FastingFormModal } from "../components/FastingFormModal";
 import { PeriodFormModal } from "../components/PeriodFormModal";
 import { useLanguage } from "../context/LanguageContext";
 import { FastingDayRecord, FastingSummary, PeriodRecord, PeriodSummary } from "../types/models";
+import { getApiErrorMessage } from "../utils/apiError";
 import { formatDateForApi } from "../utils/datetime";
 
 export function HomePage() {
@@ -46,8 +48,8 @@ export function HomePage() {
       setPeriods(periodsData);
       setFastingSummary(fastingSummaryData);
       setTodayFastingRecord(fastingTodayData[0] ?? null);
-    } catch {
-      setError(t("status.error"));
+    } catch (error) {
+      setError(getApiErrorMessage(error, t("status.error")));
     } finally {
       setLoading(false);
     }
@@ -81,7 +83,7 @@ export function HomePage() {
     if (!periodSummary?.nextExpectedPeriodStartDate) return null;
     const today = dayjs().startOf("day");
     const nextExpected = dayjs(periodSummary.nextExpectedPeriodStartDate).startOf("day");
-    return nextExpected.diff(today, "day");
+    return Math.max(nextExpected.diff(today, "day"), 0);
   }, [periodSummary]);
 
   const handleCreatePeriod = async (payload: { startDateTime: string; endDateTime?: string | null }) => {
@@ -93,9 +95,13 @@ export function HomePage() {
   };
 
   const handleEndPeriodNow = async () => {
-    if (!activePeriod) return;
-    await updatePeriod(activePeriod.id, { endDateTime: new Date().toISOString() });
-    await refresh();
+    try {
+      if (!activePeriod) return;
+      await updatePeriod(activePeriod.id, { endDateTime: new Date().toISOString() });
+      await refresh();
+    } catch (error) {
+      setError(getApiErrorMessage(error, t("status.error")));
+    }
   };
 
   const handleSaveFasting = async (payload: {
@@ -116,7 +122,14 @@ export function HomePage() {
   }
 
   if (error) {
-    return <div className="error-text">{error}</div>;
+    return (
+      <div className="stack">
+        <p className="error-text">{error}</p>
+        <button type="button" className="btn btn-primary" onClick={() => void refresh()}>
+          {t("button.retry")}
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -134,7 +147,11 @@ export function HomePage() {
           <>
             <p>{t("home.periodCard.noActive")}</p>
             {nextExpectedInDays !== null ? (
-              <p>{t("home.periodCard.nextExpectedIn", { count: nextExpectedInDays })}</p>
+              <p>
+                {nextExpectedInDays > 0
+                  ? t("home.periodCard.nextExpectedIn", { count: nextExpectedInDays })
+                  : t("home.periodCard.nextExpectedToday")}
+              </p>
             ) : (
               <p>{t("home.periodCard.nextExpectedUnknown")}</p>
             )}
@@ -163,6 +180,9 @@ export function HomePage() {
           <button type="button" className="btn btn-fasting" onClick={() => setOpenFastingModal(true)}>
             {t("button.logFast")}
           </button>
+          <Link to="/calendar" className="btn btn-secondary">
+            {t("button.openCalendar")}
+          </Link>
         </div>
       </section>
 

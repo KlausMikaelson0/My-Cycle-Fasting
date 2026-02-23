@@ -17,6 +17,10 @@ const updatePeriodSchema = z.object({
   endDateTime: z.coerce.date().nullable().optional(),
 });
 
+function hasInvalidPeriodRange(startDateTime: Date, endDateTime?: Date | null): boolean {
+  return Boolean(endDateTime && endDateTime.getTime() < startDateTime.getTime());
+}
+
 function requireUserId(req: AuthenticatedRequest, res: Response): string | null {
   if (!req.userId) {
     res.status(401).json({ message: "Unauthorized" });
@@ -48,8 +52,19 @@ router.post("/", async (req: AuthenticatedRequest, res) => {
     if (!userId) return;
 
     const input = createPeriodSchema.parse(req.body);
+    const userObjectId = new Types.ObjectId(userId);
+    const activePeriod = await Period.findOne({
+      userId: userObjectId,
+      $or: [{ endDateTime: { $exists: false } }, { endDateTime: null }],
+    });
+
+    if (activePeriod) {
+      res.status(409).json({ message: "Active period already exists. End it before starting a new one." });
+      return;
+    }
+
     const period = await Period.create({
-      userId: new Types.ObjectId(userId),
+      userId: userObjectId,
       startDateTime: input.startDateTime,
     });
     res.status(201).json(period);
@@ -69,9 +84,10 @@ router.put("/:id", async (req: AuthenticatedRequest, res) => {
 
     const periodId = String(req.params.id);
     const input = updatePeriodSchema.parse(req.body);
+    const userObjectId = new Types.ObjectId(userId);
     const period = await Period.findOne({
       _id: periodId,
-      userId: new Types.ObjectId(userId),
+      userId: userObjectId,
     });
     if (!period) {
       res.status(404).json({ message: "Period not found" });
@@ -85,6 +101,11 @@ router.put("/:id", async (req: AuthenticatedRequest, res) => {
       } else {
         period.endDateTime = input.endDateTime;
       }
+    }
+
+    if (hasInvalidPeriodRange(period.startDateTime, period.endDateTime)) {
+      res.status(400).json({ message: "endDateTime cannot be earlier than startDateTime" });
+      return;
     }
 
     await period.save();

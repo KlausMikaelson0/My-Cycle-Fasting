@@ -15,6 +15,7 @@ import { Modal } from "../components/Modal";
 import { PeriodFormModal } from "../components/PeriodFormModal";
 import { useLanguage } from "../context/LanguageContext";
 import { FastingDayRecord, PeriodRecord, PeriodSummary } from "../types/models";
+import { getApiErrorMessage } from "../utils/apiError";
 import {
   formatLocalizedDate,
   formatLocalizedDateTime,
@@ -43,6 +44,7 @@ export function CalendarPage() {
   const { t, language } = useLanguage();
   const [month, setMonth] = useState(dayjs().startOf("month"));
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [periods, setPeriods] = useState<PeriodRecord[]>([]);
   const [periodSummary, setPeriodSummary] = useState<PeriodSummary | null>(null);
   const [fastingDays, setFastingDays] = useState<FastingDayRecord[]>([]);
@@ -53,6 +55,7 @@ export function CalendarPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const startDate = month.startOf("month").format("YYYY-MM-DD");
       const endDate = month.endOf("month").format("YYYY-MM-DD");
@@ -64,10 +67,12 @@ export function CalendarPage() {
       setPeriodSummary(periodSummaryData);
       setPeriods(periodsData);
       setFastingDays(fastingData);
+    } catch (refreshError) {
+      setError(getApiErrorMessage(refreshError, t("status.error")));
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, t]);
 
   useEffect(() => {
     void refresh();
@@ -87,9 +92,6 @@ export function CalendarPage() {
     : null;
 
   const selectedFasting = selectedDate ? fastingMap.get(selectedDate) ?? null : null;
-  const selectedPeriodStart = selectedDate
-    ? periods.find((period) => dayjs(period.startDateTime).format("YYYY-MM-DD") === selectedDate) ?? null
-    : null;
   const selectedPeriodRange = selectedDate
     ? periods.find((period) => isDateInPeriod(dayjs(selectedDate), period)) ?? null
     : null;
@@ -111,17 +113,25 @@ export function CalendarPage() {
   };
 
   const handleDeleteFasting = async () => {
-    if (!selectedFasting) return;
-    await deleteFastingDay(selectedFasting._id);
-    await refresh();
-    setSelectedDate(null);
+    try {
+      if (!selectedFasting) return;
+      await deleteFastingDay(selectedFasting._id);
+      await refresh();
+      setSelectedDate(null);
+    } catch (deleteError) {
+      setError(getApiErrorMessage(deleteError, t("status.error")));
+    }
   };
 
   const handleDeletePeriod = async () => {
-    if (!selectedPeriodStart) return;
-    await deletePeriod(selectedPeriodStart._id);
-    await refresh();
-    setSelectedDate(null);
+    try {
+      if (!selectedPeriodRange) return;
+      await deletePeriod(selectedPeriodRange._id);
+      await refresh();
+      setSelectedDate(null);
+    } catch (deleteError) {
+      setError(getApiErrorMessage(deleteError, t("status.error")));
+    }
   };
 
   const handleSavePeriod = async (payload: { startDateTime: string; endDateTime?: string | null }) => {
@@ -146,6 +156,24 @@ export function CalendarPage() {
       </div>
 
       {loading ? <p>{t("status.loading")}</p> : null}
+      {error ? (
+        <div className="button-row">
+          <p className="error-text">{error}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void refresh()}>
+            {t("button.retry")}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="calendar-weekdays">
+        <span>{t("calendar.weekday.sun")}</span>
+        <span>{t("calendar.weekday.mon")}</span>
+        <span>{t("calendar.weekday.tue")}</span>
+        <span>{t("calendar.weekday.wed")}</span>
+        <span>{t("calendar.weekday.thu")}</span>
+        <span>{t("calendar.weekday.fri")}</span>
+        <span>{t("calendar.weekday.sat")}</span>
+      </div>
 
       <div className="calendar-grid">
         {days.map((day) => {
@@ -223,13 +251,13 @@ export function CalendarPage() {
               ) : null}
             </div>
 
-            {selectedPeriodStart ? (
+            {selectedPeriodRange ? (
               <div className="button-row">
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
-                    setEditingPeriod(selectedPeriodStart);
+                    setEditingPeriod(selectedPeriodRange);
                     setOpenPeriodModal(true);
                   }}
                 >

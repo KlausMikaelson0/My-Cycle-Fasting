@@ -4,6 +4,7 @@ import { updateMe } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { Language } from "../i18n";
+import { getApiErrorMessage } from "../utils/apiError";
 
 export function SettingsPage() {
   const { user, updateUserLocally } = useAuth();
@@ -37,6 +38,7 @@ export function SettingsPage() {
         (position) => {
           setLatitude(position.coords.latitude);
           setLongitude(position.coords.longitude);
+          setMessage(t("settings.locationReadSuccess"));
           resolve();
         },
         () => {
@@ -52,6 +54,16 @@ export function SettingsPage() {
     setMessage(null);
 
     try {
+      if (locationType === "gps" && (latitude === undefined || longitude === undefined)) {
+        setMessage(t("settings.locationGpsRequired"));
+        return;
+      }
+
+      if (locationType === "manual" && !cityName.trim()) {
+        setMessage(t("settings.locationCityRequired"));
+        return;
+      }
+
       const payload: {
         language: Language;
         locationType: "gps" | "manual";
@@ -67,15 +79,15 @@ export function SettingsPage() {
         payload.latitude = latitude;
         payload.longitude = longitude;
       } else {
-        payload.cityName = cityName;
+        payload.cityName = cityName.trim();
       }
 
       const nextUser = await updateMe(payload);
       updateUserLocally(nextUser);
       setLanguage(nextUser.language);
       setMessage(t("settings.saved"));
-    } catch {
-      setMessage(t("status.error"));
+    } catch (error) {
+      setMessage(getApiErrorMessage(error, t("status.error")));
     } finally {
       setSaving(false);
     }
@@ -144,6 +156,11 @@ export function SettingsPage() {
       <section className="card">
         <h2>{t("settings.calculationTitle")}</h2>
         <p>{t("settings.calculationText")}</p>
+      </section>
+
+      <section className="card">
+        <h2>{t("settings.notifications")}</h2>
+        <p>{t("settings.notificationsText")}</p>
       </section>
 
       {message ? <p className="muted">{message}</p> : null}

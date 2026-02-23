@@ -17,9 +17,27 @@ export function isFastValid(fastingDay: FastingValidationInput): boolean {
 }
 
 export function buildFastingSummary(days: IFastingDay[]) {
-  const ramadanDaysFasted = days.filter((day) => day.isRamadanDay && isFastValid(day)).length;
-  const missedDaysInRamadan = days.filter((day) => day.isRamadanDay && !isFastValid(day)).length;
-  const qadaDaysDone = days.filter((day) => day.isQada && isFastValid(day)).length;
+  const ramadanDays = days
+    .filter((day) => day.isRamadanDay)
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const ramadanDaysFasted = ramadanDays.filter((day) => isFastValid(day)).length;
+  const missedDaysInRamadan = ramadanDays.filter((day) => !isFastValid(day)).length;
+
+  const lastRamadanDate = ramadanDays.length ? ramadanDays[ramadanDays.length - 1].date : null;
+  const qadaDaysDone = days.filter((day) => {
+    if (!day.isQada || day.isRamadanDay || !isFastValid(day)) {
+      return false;
+    }
+
+    // Qada should be counted after Ramadan when we have Ramadan records.
+    if (lastRamadanDate) {
+      return day.date.getTime() > lastRamadanDate.getTime();
+    }
+
+    return true;
+  }).length;
+
   const remainingQada = Math.max(missedDaysInRamadan - qadaDaysDone, 0);
 
   return {

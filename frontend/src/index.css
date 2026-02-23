@@ -216,6 +216,18 @@ select {
   gap: 0.4rem;
 }
 
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.calendar-weekdays span {
+  text-align: center;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
 .calendar-day {
   aspect-ratio: 1 / 1;
   border-radius: 8px;

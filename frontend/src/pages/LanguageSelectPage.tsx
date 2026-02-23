@@ -5,18 +5,21 @@ import { updateMe } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { Language } from "../i18n";
+import { getApiErrorMessage } from "../utils/apiError";
 
 export function LanguageSelectPage() {
   const navigate = useNavigate();
   const { t, setLanguage, hasSelectedLanguage } = useLanguage();
   const { isAuthenticated, user, updateUserLocally } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (hasSelectedLanguage && !saving) {
     return <Navigate to={isAuthenticated ? "/" : "/login"} replace />;
   }
 
   const handleSelect = async (language: Language) => {
+    setErrorMessage(null);
     setLanguage(language);
 
     if (isAuthenticated && user) {
@@ -24,6 +27,9 @@ export function LanguageSelectPage() {
       try {
         const nextUser = await updateMe({ language });
         updateUserLocally(nextUser);
+      } catch (error) {
+        setErrorMessage(getApiErrorMessage(error, t("status.error")));
+        return;
       } finally {
         setSaving(false);
       }
@@ -45,6 +51,7 @@ export function LanguageSelectPage() {
           <button type="button" className="btn btn-secondary" onClick={() => handleSelect("en")}>
             English
           </button>
+          {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
         </div>
       </div>
     </div>

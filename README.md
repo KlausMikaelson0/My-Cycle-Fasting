@@ -49,6 +49,18 @@ Complete full-stack prototype for menstrual cycle tracking + Ramadan/Qada fastin
 - Node.js 20+ (recommended)
 - MongoDB running locally or remotely
 
+## Quick Start (single command from root)
+
+```bash
+npm install
+npm run dev
+```
+
+This starts both:
+
+- backend on `http://localhost:4000`
+- frontend on `http://localhost:5173`
+
 ## 1) Backend Setup (`backend/`)
 
 ```bash
@@ -83,6 +95,14 @@ npm run dev
 
 Frontend runs on `http://localhost:5173` by default.
 
+## VS Code launch helper
+
+This repo includes `.vscode/launch.json` for opening Chrome on:
+
+- `http://localhost:5173`
+
+Before pressing Run/Debug in VS Code, make sure backend + frontend dev servers are already running.
+
 ## API Base Path
 
 All API routes are prefixed with:
@@ -108,3 +128,9 @@ Main route groups:
 
 - Ramadan day detection in backend currently includes a stub helper (`inferRamadanDay`) and should be replaced with accurate Hijri calendar logic in production.
 - Prayer times integration is intentionally stubbed and clearly marked for real provider integration.
+- Period creation now prevents creating a new period while another active period is still open.
+
+## Vercel SPA note
+
+If deploying the frontend to Vercel, set project root to `frontend/`.
+The `frontend/vercel.json` rewrite routes all paths to `index.html` so browser refresh on nested routes does not return 404.
