@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Response, Router } from "express";
 import { Types } from "mongoose";
 import { z } from "zod";
 
 import { FastingDay } from "../models/FastingDay";
 import { User } from "../models/User";
 import { buildFastingSummary, inferRamadanDay } from "../services/fastingService";
-import { getPrayerTimes } from "../services/prayerTimesService";
+import { getPrayerTimes, PrayerTimesResult } from "../services/prayerTimesService";
 import { AuthenticatedRequest } from "../types/auth";
 import { normalizeDateOnly, yearBoundaries } from "../utils/date";
 
@@ -37,8 +37,19 @@ const summarySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2200).optional(),
 });
 
-async function resolvePrayerTimesIfPossible(req: AuthenticatedRequest, date: Date) {
-  const user = await User.findById(req.userId);
+function requireUserId(req: AuthenticatedRequest, res: Response): string | null {
+  if (!req.userId) {
+    res.status(401).json({ message: "Unauthorized" });
+    return null;
+  }
+  return req.userId;
+}
+
+async function resolvePrayerTimesIfPossible(
+  userId: string,
+  date: Date,
+): Promise<Partial<PrayerTimesResult>> {
+  const user = await User.findById(userId);
   if (!user) {
     return {};
   }
@@ -50,23 +61,35 @@ async function resolvePrayerTimesIfPossible(req: AuthenticatedRequest, date: Dat
     return {};
   }
 
-  const prayerTimes = await getPrayerTimes({
+  const prayerTimeParams: { date: Date; latitude?: number; longitude?: number; cityName?: string } = {
     date,
-    latitude: user.latitude,
-    longitude: user.longitude,
-    cityName: user.cityName,
-  });
+  };
+  if (hasGps) {
+    prayerTimeParams.latitude = user.latitude!;
+    prayerTimeParams.longitude = user.longitude!;
+  }
+  if (hasCity) {
+    prayerTimeParams.cityName = user.cityName!;
+  }
+
+  const prayerTimes = await getPrayerTimes(prayerTimeParams);
 
   return prayerTimes;
 }
 
 router.get("/", async (req: AuthenticatedRequest, res) => {
   try {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const query = rangeSchema.parse(req.query);
-    const mongoQuery: Record<string, unknown> = { userId: req.userId };
+    const mongoQuery: {
+      userId: Types.ObjectId;
+      date?: { $gte?: Date; $lte?: Date };
+    } = { userId: new Types.ObjectId(userId) };
 
     if (query.startDate || query.endDate) {
-      const dateQuery: Record<string, Date> = {};
+      const dateQuery: { $gte?: Date; $lte?: Date } = {};
       if (query.startDate) dateQuery.$gte = normalizeDateOnly(query.startDate);
       if (query.endDate) dateQuery.$lte = normalizeDateOnly(query.endDate);
       mongoQuery.date = dateQuery;
@@ -85,11 +108,14 @@ router.get("/", async (req: AuthenticatedRequest, res) => {
 
 router.get("/summary", async (req: AuthenticatedRequest, res) => {
   try {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const { year = new Date().getUTCFullYear() } = summarySchema.parse(req.query);
     const boundaries = yearBoundaries(year);
 
     const days = await FastingDay.find({
-      userId: req.userId,
+      userId: new Types.ObjectId(userId),
       date: {
         $gte: boundaries.start,
         $lt: boundaries.end,
@@ -109,21 +135,28 @@ router.get("/summary", async (req: AuthenticatedRequest, res) => {
 
 router.post("/", async (req: AuthenticatedRequest, res) => {
   try {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const input = createOrUpdateSchema.parse(req.body);
     const normalizedDate = normalizeDateOnly(input.date);
-    const prayerTimes = await resolvePrayerTimesIfPossible(req, normalizedDate);
+    const prayerTimes = await resolvePrayerTimesIfPossible(userId, normalizedDate);
+    const updatePayload: Record<string, unknown> = {
+      userId: new Types.ObjectId(userId),
+      date: normalizedDate,
+      isRamadanDay: input.isRamadanDay ?? inferRamadanDay(normalizedDate),
+      isFasted: input.isFasted,
+      isQada: input.isQada,
+      periodStartDateTime: input.periodStartDateTime ?? undefined,
+    };
+    if (prayerTimes.fajrTime && prayerTimes.maghribTime) {
+      updatePayload.fajrTime = prayerTimes.fajrTime;
+      updatePayload.maghribTime = prayerTimes.maghribTime;
+    }
 
     const updated = await FastingDay.findOneAndUpdate(
-      { userId: req.userId, date: normalizedDate },
-      {
-        userId: new Types.ObjectId(req.userId),
-        date: normalizedDate,
-        isRamadanDay: input.isRamadanDay ?? inferRamadanDay(normalizedDate),
-        isFasted: input.isFasted,
-        isQada: input.isQada,
-        periodStartDateTime: input.periodStartDateTime ?? undefined,
-        ...prayerTimes,
-      },
+      { userId: new Types.ObjectId(userId), date: normalizedDate },
+      updatePayload,
       {
         new: true,
         upsert: true,
@@ -143,8 +176,15 @@ router.post("/", async (req: AuthenticatedRequest, res) => {
 
 router.put("/:id", async (req: AuthenticatedRequest, res) => {
   try {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
+    const fastingDayId = String(req.params.id);
     const input = updateSchema.parse(req.body);
-    const fastingDay = await FastingDay.findOne({ _id: req.params.id, userId: req.userId });
+    const fastingDay = await FastingDay.findOne({
+      _id: fastingDayId,
+      userId: new Types.ObjectId(userId),
+    });
     if (!fastingDay) {
       res.status(404).json({ message: "Fasting day not found" });
       return;
@@ -157,11 +197,15 @@ router.put("/:id", async (req: AuthenticatedRequest, res) => {
     if (input.isFasted !== undefined) fastingDay.isFasted = input.isFasted;
     if (input.isQada !== undefined) fastingDay.isQada = input.isQada;
     if (input.periodStartDateTime !== undefined) {
-      fastingDay.periodStartDateTime = input.periodStartDateTime ?? undefined;
+      if (input.periodStartDateTime === null) {
+        fastingDay.set("periodStartDateTime", undefined);
+      } else {
+        fastingDay.periodStartDateTime = input.periodStartDateTime;
+      }
     }
 
-    const prayerTimes = await resolvePrayerTimesIfPossible(req, fastingDay.date);
-    if ("fajrTime" in prayerTimes && prayerTimes.fajrTime) {
+    const prayerTimes = await resolvePrayerTimesIfPossible(userId, fastingDay.date);
+    if (prayerTimes.fajrTime && prayerTimes.maghribTime) {
       fastingDay.fajrTime = prayerTimes.fajrTime;
       fastingDay.maghribTime = prayerTimes.maghribTime;
     }
@@ -178,7 +222,14 @@ router.put("/:id", async (req: AuthenticatedRequest, res) => {
 });
 
 router.delete("/:id", async (req: AuthenticatedRequest, res) => {
-  const result = await FastingDay.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+
+  const fastingDayId = String(req.params.id);
+  const result = await FastingDay.findOneAndDelete({
+    _id: fastingDayId,
+    userId: new Types.ObjectId(userId),
+  });
   if (!result) {
     res.status(404).json({ message: "Fasting day not found" });
     return;

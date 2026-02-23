@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Response, Router } from "express";
 import { z } from "zod";
 
 import { User } from "../models/User";
@@ -35,8 +35,19 @@ const updateSchema = z
     }
   });
 
+function requireUserId(req: AuthenticatedRequest, res: Response): string | null {
+  if (!req.userId) {
+    res.status(401).json({ message: "Unauthorized" });
+    return null;
+  }
+  return req.userId;
+}
+
 router.get("/me", async (req: AuthenticatedRequest, res) => {
-  const user = await User.findById(req.userId);
+  const userId = requireUserId(req, res);
+  if (!userId) return;
+
+  const user = await User.findById(userId);
   if (!user) {
     res.status(404).json({ message: "User not found" });
     return;
@@ -47,8 +58,11 @@ router.get("/me", async (req: AuthenticatedRequest, res) => {
 
 router.put("/me", async (req: AuthenticatedRequest, res) => {
   try {
+    const userId = requireUserId(req, res);
+    if (!userId) return;
+
     const input = updateSchema.parse(req.body);
-    const user = await User.findById(req.userId);
+    const user = await User.findById(userId);
 
     if (!user) {
       res.status(404).json({ message: "User not found" });
@@ -62,11 +76,11 @@ router.put("/me", async (req: AuthenticatedRequest, res) => {
     if (input.cityName !== undefined) user.cityName = input.cityName;
 
     if (input.locationType === "manual") {
-      user.latitude = undefined;
-      user.longitude = undefined;
+      user.set("latitude", undefined);
+      user.set("longitude", undefined);
     }
     if (input.locationType === "gps") {
-      user.cityName = undefined;
+      user.set("cityName", undefined);
     }
 
     await user.save();

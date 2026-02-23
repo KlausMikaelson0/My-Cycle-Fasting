@@ -1,7 +1,12 @@
-import { PeriodDocument } from "../models/Period";
 import { diffInDays } from "../utils/date";
 
-export function calculateAverageCycleLength(periods: Pick<PeriodDocument, "startDateTime">[]): number | null {
+interface PeriodLike {
+  _id?: unknown;
+  startDateTime: Date;
+  endDateTime?: Date;
+}
+
+export function calculateAverageCycleLength(periods: Pick<PeriodLike, "startDateTime">[]): number | null {
   if (periods.length < 2) {
     return null;
   }
@@ -12,7 +17,11 @@ export function calculateAverageCycleLength(periods: Pick<PeriodDocument, "start
 
   const cycleDiffs: number[] = [];
   for (let i = 1; i < sorted.length; i += 1) {
-    const days = diffInDays(sorted[i - 1].startDateTime, sorted[i].startDateTime);
+    const previous = sorted[i - 1];
+    const current = sorted[i];
+    if (!previous || !current) continue;
+
+    const days = diffInDays(previous.startDateTime, current.startDateTime);
     if (days > 0) {
       cycleDiffs.push(days);
     }
@@ -37,12 +46,12 @@ export function calculateNextExpectedPeriodStartDate(
   return new Date(lastPeriodStartDate.getTime() + averageCycleLength * 24 * 60 * 60 * 1000);
 }
 
-export function buildPeriodSummary(periods: PeriodDocument[]) {
+export function buildPeriodSummary(periods: PeriodLike[]) {
   const sorted = [...periods].sort(
     (a, b) => a.startDateTime.getTime() - b.startDateTime.getTime(),
   );
 
-  const lastPeriod = sorted.at(-1) ?? null;
+  const lastPeriod = sorted.length > 0 ? sorted[sorted.length - 1] : null;
   const averageCycleLength = calculateAverageCycleLength(sorted);
   const lastPeriodStartDate = lastPeriod?.startDateTime ?? null;
   const nextExpectedPeriodStartDate = calculateNextExpectedPeriodStartDate(
@@ -57,7 +66,7 @@ export function buildPeriodSummary(periods: PeriodDocument[]) {
     activePeriod:
       lastPeriod && !lastPeriod.endDateTime
         ? {
-            id: String(lastPeriod._id),
+            id: String(lastPeriod._id ?? ""),
             startDateTime: lastPeriod.startDateTime,
             endDateTime: lastPeriod.endDateTime,
           }
