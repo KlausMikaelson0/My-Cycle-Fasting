@@ -24,7 +24,8 @@ export function buildFastingSummary(days: IFastingDay[]) {
   const ramadanDaysFasted = ramadanDays.filter((day) => isFastValid(day)).length;
   const missedDaysInRamadan = ramadanDays.filter((day) => !isFastValid(day)).length;
 
-  const lastRamadanDate = ramadanDays.length ? ramadanDays[ramadanDays.length - 1].date : null;
+  const lastRamadanDay = ramadanDays.length > 0 ? ramadanDays[ramadanDays.length - 1] : null;
+  const lastRamadanDate = lastRamadanDay ? lastRamadanDay.date : null;
   const qadaDaysDone = days.filter((day) => {
     if (!day.isQada || day.isRamadanDay || !isFastValid(day)) {
       return false;
