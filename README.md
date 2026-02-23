@@ -61,6 +61,12 @@ This starts both:
 - backend on `http://localhost:4000`
 - frontend on `http://localhost:5173`
 
+If this is your first run, also generate local env files:
+
+```bash
+npm run bootstrap
+```
+
 ## 1) Backend Setup (`backend/`)
 
 ```bash
@@ -97,11 +103,37 @@ Frontend runs on `http://localhost:5173` by default.
 
 ## VS Code launch helper
 
-This repo includes `.vscode/launch.json` for opening Chrome on:
+This repo includes:
+
+- `.vscode/tasks.json`
+- `.vscode/launch.json`
+
+### Recommended in VS Code
+
+1. Run task: **Setup (install + env)** (first time only)
+2. Run task: **Run Full App**
+3. Launch config: **Open Frontend (localhost:5173)**
+
+Or directly run launch compound:
+
+- **Run Full Stack + Browser**
+
+Browser target:
 
 - `http://localhost:5173`
 
 Before pressing Run/Debug in VS Code, make sure backend + frontend dev servers are already running.
+
+## MongoDB local check
+
+If backend fails with `ECONNREFUSED 127.0.0.1:27017`, MongoDB is not running.
+
+For Homebrew installations:
+
+```bash
+brew services start mongodb/brew/mongodb-community@7.0
+brew services list | grep mongo
+```
 
 ## API Base Path
 

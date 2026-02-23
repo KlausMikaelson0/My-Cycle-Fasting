@@ -1,6 +1,46 @@
 {
   "version": "0.2.0",
+  "compounds": [
+    {
+      "name": "Run Full Stack + Browser",
+      "configurations": [
+        "Run Backend Dev Server",
+        "Run Frontend Dev Server",
+        "Open Frontend (localhost:5173)"
+      ]
+    }
+  ],
   "configurations": [
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Run Backend Dev Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:backend"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Run Frontend Dev Server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:frontend"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
     {
       "type": "pwa-chrome",
       "request": "launch",
